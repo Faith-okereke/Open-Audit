@@ -1,10 +1,20 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { AlertCircle, BookOpen, ArrowRight, Radio, PauseCircle, PlayCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  AlertCircle,
+  ArrowRight,
+  BookOpen,
+  FileJson,
+  PauseCircle,
+  PlayCircle,
+  Radio,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { SearchBar } from "@/components/dashboard/SearchBar";
 import { EventFeedTable } from "@/components/dashboard/EventFeedTable";
-import { StatsBar } from "@/components/dashboard/StatsBar";
+import { AnalyticsSummaryCards } from "@/components/dashboard/AnalyticsSummaryCards";
 import { UploadAbiDialog } from "@/components/dashboard/UploadAbiDialog";
 import { Button } from "@/components/ui/button";
 import { translateEvents } from "@/lib/translator/registry";
@@ -16,8 +26,7 @@ import {
 } from "@/lib/translator/custom-abi";
 import { getMockEventsForContract, MOCK_RAW_EVENTS } from "@/lib/mock-data";
 import { useLiveFeed } from "@/lib/hooks/useLiveFeed";
-import { Button } from "@/components/ui/button";
-import type { TranslatedEvent } from "@/lib/translator/types";
+import type { CustomAbi, RawEvent, TranslatedEvent } from "@/lib/translator/types";
 
 /** Simulates a network delay for realistic UX. */
 function simulateNetworkDelay(ms: number): Promise<void> {
@@ -58,8 +67,13 @@ export function DashboardClient(): React.JSX.Element {
     [rawEvents, customBlueprints]
   );
 
-  const handleNewEvent = useCallback((event: TranslatedEvent) => {
-    setEvents((prev) => [event, ...prev]);
+  // The live feed delivers already-translated events; prepend the underlying
+  // raw event so the memoised translation pipeline above stays the single
+  // source of truth.
+  const handleNewEvent = useCallback(function (event: TranslatedEvent): void {
+    setRawEvents(function (prev) {
+      return [event.raw, ...prev];
+    });
   }, []);
 
   const { isLive, isPaused, newEventIds, toggleLive, togglePause } = useLiveFeed(handleNewEvent);
@@ -171,8 +185,8 @@ export function DashboardClient(): React.JSX.Element {
         })}
       </section>
 
-      {/* Stats */}
-      {!isLoading && <StatsBar events={events} />}
+      {/* Analytics summary */}
+      {!isLoading && <AnalyticsSummaryCards events={events} />}
 
       {/* Feed */}
       <section aria-label="Event feed">
