@@ -1,7 +1,17 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { AlertCircle, BookOpen, ArrowRight, Radio, PauseCircle, PlayCircle } from "lucide-react";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import {
+  AlertCircle,
+  BookOpen,
+  ArrowRight,
+  Radio,
+  PauseCircle,
+  PlayCircle,
+  Upload,
+  FileJson,
+  Trash2,
+} from "lucide-react";
 import { SearchBar } from "@/components/dashboard/SearchBar";
 import { EventFeedTable } from "@/components/dashboard/EventFeedTable";
 import { StatsBar } from "@/components/dashboard/StatsBar";
@@ -16,8 +26,7 @@ import {
 } from "@/lib/translator/custom-abi";
 import { getMockEventsForContract, MOCK_RAW_EVENTS } from "@/lib/mock-data";
 import { useLiveFeed } from "@/lib/hooks/useLiveFeed";
-import { Button } from "@/components/ui/button";
-import type { TranslatedEvent } from "@/lib/translator/types";
+import type { TranslatedEvent, RawEvent, CustomAbi } from "@/lib/translator/types";
 
 /** Simulates a network delay for realistic UX. */
 function simulateNetworkDelay(ms: number): Promise<void> {
@@ -31,6 +40,7 @@ export function DashboardClient(): React.JSX.Element {
   const [customAbis, setCustomAbis] = useState<CustomAbi[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchedContract, setSearchedContract] = useState<string | null>(null);
+  const [eventTopicFilter, setEventTopicFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
 
@@ -49,8 +59,6 @@ export function DashboardClient(): React.JSX.Element {
     [customAbis]
   );
 
-  // Derive translations from the raw events + current custom blueprints so the
-  // feed re-translates instantly when an ABI is uploaded or removed.
   const events = useMemo(
     function () {
       return translateEvents(rawEvents, customBlueprints);
@@ -58,8 +66,19 @@ export function DashboardClient(): React.JSX.Element {
     [rawEvents, customBlueprints]
   );
 
+  const filteredEvents = useMemo(
+    function () {
+      if (!eventTopicFilter.trim()) return events;
+      const filter = eventTopicFilter.trim().toLowerCase();
+      return events.filter(function (e) {
+        return e.eventType?.toLowerCase().includes(filter);
+      });
+    },
+    [events, eventTopicFilter]
+  );
+
   const handleNewEvent = useCallback((event: TranslatedEvent) => {
-    setEvents((prev) => [event, ...prev]);
+    setRawEvents((prev) => [event.raw, ...prev]);
   }, []);
 
   const { isLive, isPaused, newEventIds, toggleLive, togglePause } = useLiveFeed(handleNewEvent);
@@ -101,7 +120,12 @@ export function DashboardClient(): React.JSX.Element {
     <div className="space-y-6">
       {/* Search */}
       <section aria-label="Contract search">
-        <SearchBar onSearch={handleSearch} isLoading={isLoading} />
+        <SearchBar
+          onSearch={handleSearch}
+          isLoading={isLoading}
+          topicFilter={eventTopicFilter}
+          onTopicFilterChange={setEventTopicFilter}
+        />
       </section>
 
       {/* Error state */}
@@ -116,20 +140,33 @@ export function DashboardClient(): React.JSX.Element {
       )}
 
       {/* Active filter indicator */}
-      {searchedContract && !isLoading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>Showing events for:</span>
-          <code className="font-mono text-xs bg-muted px-2 py-1 rounded">
-            {searchedContract.slice(0, 10)}...{searchedContract.slice(-6)}
-          </code>
+      {(searchedContract || eventTopicFilter) && !isLoading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+          {searchedContract && (
+            <>
+              <span>Contract:</span>
+              <code className="font-mono text-xs bg-muted px-2 py-1 rounded">
+                {searchedContract.slice(0, 10)}...{searchedContract.slice(-6)}
+              </code>
+            </>
+          )}
+          {eventTopicFilter && (
+            <>
+              <span>Event:</span>
+              <code className="font-mono text-xs bg-muted px-2 py-1 rounded">
+                {eventTopicFilter}
+              </code>
+            </>
+          )}
           <button
             type="button"
             onClick={function () {
               handleSearch("");
+              setEventTopicFilter("");
             }}
             className="text-violet-600 dark:text-violet-400 hover:underline text-xs"
           >
-            Clear filter
+            Clear all filters
           </button>
         </div>
       )}
@@ -212,11 +249,13 @@ export function DashboardClient(): React.JSX.Element {
               {isLive ? "Stop Live" : "Live Feed"}
             </Button>
             <span className="text-xs text-muted-foreground">
-              {isLoading ? "Loading..." : `${events.length} events`}
+              {isLoading
+                ? "Loading..."
+                : `${filteredEvents.length} event${filteredEvents.length !== 1 ? "s" : ""}`}
             </span>
           </div>
         </div>
-        <EventFeedTable events={events} isLoading={isLoading} newEventIds={newEventIds} />
+        <EventFeedTable events={filteredEvents} isLoading={isLoading} newEventIds={newEventIds} />
       </section>
 
       {/* Contributor CTA */}
